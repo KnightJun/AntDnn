@@ -82,17 +82,19 @@ TEST(tensor, conv2d)
 	activation_relu(out_ts);
 	Dense(out_ts, out_ts, tsvec[10], tsvec[11]);
 	activation_softmax(out_ts);
+	float resout = out_ts.sum();
 	cout << out_ts << endl;
+	EXPECT_EQ(0x3f7fffff, *(int *)&resout);
 }
 
 TEST(tensor, fcn)
 {
-	vector<Tensor> tsvec;
+	vector<Tensor> tsvec(38);
 	Tensor in_ts, out_ts;
-
+	tsvec.resize(10);
 	load_tensor_vector("C:\\Users\\jun\\OneDrive\\code\\cppdnn\\python\\fcn_weights.antlist", tsvec);
 	in_ts.load_file("C:\\Users\\jun\\OneDrive\\code\\cppdnn\\python\\fcn_img.antts");
-	auto it_wei = tsvec.begin();
+	
 	Conv2D(in_ts, out_ts, tsvec[0], tsvec[1], PADDING_SAME);activation_relu(out_ts);
 	Conv2D(out_ts, out_ts, tsvec[2], tsvec[3], PADDING_SAME);activation_relu(out_ts);
 	MaxPooling2D(out_ts, out_ts, 2, 2);
@@ -115,12 +117,10 @@ TEST(tensor, fcn)
 	MaxPooling2D(out_ts, out_ts, 2, 2);
 
 	auto layers_p4 = out_ts; // split layer
-
 	Conv2D(out_ts, out_ts, tsvec[20], tsvec[21], PADDING_SAME); activation_relu(out_ts);
 	Conv2D(out_ts, out_ts, tsvec[22], tsvec[23], PADDING_SAME); activation_relu(out_ts);
 	Conv2D(out_ts, out_ts, tsvec[24], tsvec[25], PADDING_SAME); activation_relu(out_ts);
 	MaxPooling2D(out_ts, out_ts, 2, 2);
-
 	auto layers_p5 = out_ts; // split layer
 
 	Conv2D(layers_p4,layers_p4, tsvec[26], tsvec[27]); activation_relu(layers_p4);
@@ -138,6 +138,8 @@ TEST(tensor, fcn)
 	Cropping2D(out_ts, out_ts, 4, 4, 4, 4);
 	activation_softmax(out_ts);
 
+	float res = out_ts.sum();
+	EXPECT_EQ(0x4743fece, *(int *)&res);
 	cout << out_ts.shape()[0] << "," << out_ts.shape()[1] << "," << out_ts.shape()[2] << endl;
 	cout << out_ts.sum() << endl;
 }

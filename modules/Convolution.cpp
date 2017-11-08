@@ -1,48 +1,61 @@
 #include "Convolution.h"
 #define forrange(i, d) for(int i = 0; i < d; i++)
 #include <assert.h>
-void antdnn::Conv2D(
-	Tensor & in_tensor, Tensor & out_ts, 
-	Tensor &weights, Tensor &bias,
-	int padding_type)
+#ifdef USE_optimization_OPENMP
+#include <omp.h>
+#endif
+int cpu_num = 4;
+inline void o_mul_m_add(const float mul_1, const float* mul2, float *res, int count)
 {
-	Conv2D_params params;
-	auto wei_shape = weights.shape();
-	params.kernel_size.h = wei_shape[0];
-	params.kernel_size.w = wei_shape[1];
-	params.kernel_count = wei_shape[3];
-	params.padding = padding_type;
-	Tensor mid_tensor = in_tensor, out_tensor;
-	int top = (params.kernel_size.h - 1) / 2,
-		bottom = top,
-		left = (params.kernel_size.w - 1) / 2,
-		right = left;
-	if (params.padding == PADDING_SAME)
+#ifdef USE_optimization_AVX
+	if (count < 8)
 	{
-		mid_tensor.makeBorder2D(top, bottom, left, right, 0);
+		for (int c_dst = 0; c_dst < count; c_dst++) // 32
+		{
+			res[c_dst] += mul_1 * mul2[c_dst];
+		}
 	}
-	auto src_shape = mid_tensor.shape();
-	int dst_shape[3] = { 
-		src_shape[0] - (params.kernel_size.h - 1), 
-		src_shape[1] - (params.kernel_size.w - 1) , 
-		params.kernel_count };
-	out_tensor.recreate(3, dst_shape);
-	out_tensor.set_to(0);
-	// 3, 3, 3, 32
-	float *calc_res = out_tensor.ptr_write();
+	else
+	{
+		size_t cntBlock = count / 8;    // blocks
+		size_t cntRem = count % 8;
+		__m256 avx_mul_1 = _mm256_set1_ps(mul_1);
+		for (int i = 0; i < cntBlock; ++i)
+		{
+			auto midres = _mm256_mul_ps(avx_mul_1, *(__m256 *)mul2);
+			*(__m256 *)res = _mm256_add_ps(midres, *(__m256 *)res);
+			res += 8;
+			mul2 += 8;
+		}
+		for (int i = 0; i < cntRem; i++)
+		{
+			res[i] += mul_1 * mul2[i];
+		}
+	}
+#else
+	for (int c_dst = 0; c_dst < count; c_dst++) // 32
+	{
+		res[c_dst] += mul_1 * mul2[c_dst];
+	}
+#endif
+}
 
-	// get the row ptr vector from srouce matrix
-	int old_rows = src_shape[1] * src_shape[2];
-	int kernel_rows = params.kernel_size.w * src_shape[2] * params.kernel_count;
-	const float **rptrs_src = new const float*[params.kernel_size.h];
-	const float **rptrs_kernel = new const float*[params.kernel_size.h];
+void Conv2D_unit(const float *srcptr, const float *kerptr, float *dstptr, const float *ptr_bias,
+	int calc_rows, int *srcshape,
+	int *dst_shape,
+	int *ker_shape)
+{
+	int old_rows = srcshape[1] * srcshape[2];
+	int kernel_rows = ker_shape[1] * srcshape[2] * dst_shape[2];
+	const float **rptrs_src = new const float*[ker_shape[0]];
+	const float **rptrs_kernel = new const float*[ker_shape[0]];
 	auto rptrs_src_release = rptrs_src, rptrs_kernel_release = rptrs_kernel;
-	const float *ptr_bias = bias.ptr_read();
-	for (int i = 0; i < dst_shape[0]; i ++)
+
+	for (int i = 0; i < calc_rows; i++)
 	{
 		// set src rows ptr
-		rptrs_src[0] = mid_tensor.ptr_read() + i * old_rows;
-		for (int i = 1; i < params.kernel_size.h; i++)
+		rptrs_src[0] = srcptr + i * old_rows;
+		for (int i = 1; i < ker_shape[0]; i++)
 		{
 			rptrs_src[i] = rptrs_src[i - 1] + old_rows;
 		}
@@ -50,45 +63,109 @@ void antdnn::Conv2D(
 		for (int j = 0; j < dst_shape[1]; j++)
 		{
 			// reset kernel row point
-			rptrs_kernel[0] = weights.ptr_read();
-			for (int i_r = 1; i_r < params.kernel_size.h; i_r++)
+			rptrs_kernel[0] = kerptr;
+			for (int i_r = 1; i_r < ker_shape[0]; i_r++)
 			{
 				rptrs_kernel[i_r] = rptrs_kernel[i_r - 1] + kernel_rows;
 			}
 
-			for (int j_kernel = 0; j_kernel < params.kernel_size.w; j_kernel++) // 3
+			for (int j_kernel = 0; j_kernel < ker_shape[1]; j_kernel++) // 3
 			{
-				for (int c_src = 0; c_src < src_shape[2]; c_src++) // 3
+				for (int c_src = 0; c_src < srcshape[2]; c_src++) // 3
 				{
-					for (int c_dst = 0; c_dst < params.kernel_count; c_dst++) // 32
+					//for (int c_dst = 0; c_dst < dst_shape[2]; c_dst++) // 32
+					//{
+					for (int i_kernel = 0; i_kernel < ker_shape[0]; i_kernel++) // 3
 					{
-						for (int i_kernel = 0; i_kernel < params.kernel_size.h; i_kernel++) // 3
-						{
-							calc_res[c_dst] += rptrs_src[i_kernel][c_src] * (*(rptrs_kernel[i_kernel]++));
-						}
+						//dstptr[c_dst] += rptrs_src[i_kernel][c_src] * (*(rptrs_kernel[i_kernel]++));
+						o_mul_m_add(rptrs_src[i_kernel][c_src], rptrs_kernel[i_kernel], dstptr, dst_shape[2]);
+						rptrs_kernel[i_kernel] += dst_shape[2];
 					}
+					//}
 
 				}
-				for (int i_r = 0; i_r < params.kernel_size.h; i_r++)
+				for (int i_r = 0; i_r < ker_shape[0]; i_r++)
 				{
-					rptrs_src[i_r] += src_shape[2];
+					rptrs_src[i_r] += srcshape[2];
 				}
 			}
 			//add bias
-			for (int c_dst = 0; c_dst < params.kernel_count; c_dst++) // 32
+			for (int c_dst = 0; c_dst < dst_shape[2]; c_dst++) // 32
 			{
 				// output matrix next data
-				*(calc_res++) += ptr_bias[c_dst];
+				*(dstptr++) += ptr_bias[c_dst];
 			}
 			// turn back the rows point 
-			for (int i_r = 0; i_r < params.kernel_size.h; i_r++)
+			for (int i_r = 0; i_r < ker_shape[0]; i_r++)
 			{
-				rptrs_src[i_r] -= src_shape[2] * (params.kernel_size.w - 1);
+				rptrs_src[i_r] -= srcshape[2] * (ker_shape[1] - 1);
 			}
 		}
 	}
 	delete[] rptrs_src_release;
 	delete[] rptrs_kernel_release;
+}
+
+
+void antdnn::Conv2D(
+	Tensor & in_tensor, Tensor & out_ts,
+	Tensor &weights, Tensor &bias,
+	int padding_type)
+{
+	auto wei_shape = weights.shape();
+	Tensor mid_tensor = in_tensor, out_tensor;
+	if (padding_type == PADDING_SAME)
+	{
+		int top = (wei_shape[0] - 1) / 2,
+			bottom = top,
+			left = (wei_shape[1] - 1) / 2,
+			right = left;
+		mid_tensor.makeBorder2D(top, bottom, left, right, 0);
+	}
+	auto src_shape = mid_tensor.shape();
+	int dst_shape[3] = {
+		src_shape[0] - (wei_shape[0] - 1),
+		src_shape[1] - (wei_shape[1] - 1) ,
+		wei_shape[3] };
+	out_tensor.recreate(3, dst_shape);
+	out_tensor.set_to(0);
+	// 3, 3, 3, 32
+	float *dstptr = out_tensor.ptr_write();
+	const float *srcptr = mid_tensor.ptr_read();
+	auto kerptr = weights.ptr_read();
+	auto biasptr = bias.ptr_read();
+
+#ifdef USE_optimization_OPENMP
+	int each_cpu_rows = dst_shape[0] / cpu_num;
+	int last_rows = each_cpu_rows + dst_shape[0] % cpu_num;
+	int each_cpu_rows_src = each_cpu_rows * src_shape[1] * src_shape[2];
+	int each_cpu_rows_dst = each_cpu_rows * dst_shape[1] * dst_shape[2];
+#pragma omp parallel for
+	for (int i = 0; i < cpu_num; i++)
+	{
+		float *dstptr_omp = dstptr + each_cpu_rows_dst * i;
+		const float *srcptr_omp = srcptr + each_cpu_rows_src * i;
+		if (i < cpu_num - 1)
+		{
+			Conv2D_unit(srcptr_omp, kerptr, dstptr_omp, biasptr, each_cpu_rows,
+				src_shape,
+				dst_shape,
+				wei_shape);
+		}
+		else
+		{
+			Conv2D_unit(srcptr_omp, kerptr, dstptr_omp, biasptr, last_rows,
+				src_shape,
+				dst_shape,
+				wei_shape);
+		}
+	}
+#else
+	Conv2D_unit(srcptr, kerptr, dstptr, biasptr, dst_shape[0],
+		src_shape,
+		dst_shape,
+		wei_shape);
+#endif
 	out_ts = out_tensor;
 }
 
@@ -113,7 +190,7 @@ void antdnn::Conv2DTranspose(Tensor & in_tensor, Tensor & out_ts,
 	// init ptr
 	int rows_kernel = kernel_w*kernel_c * src_shape[2];
 	int rows_dst = dst_shape[1] * dst_shape[2];
-	int dst_step_x = - (kernel_c * (kernel_w - strides_x));
+	int dst_step_x = -(kernel_c * (kernel_w - strides_x));
 	int dst_step_y = (kernel_c * (kernel_w - strides_x)) + rows_dst * (strides_y - 1);
 
 	const float **kernel_ptrs = new const float*[kernel_h];
@@ -161,7 +238,7 @@ void antdnn::Conv2DTranspose(Tensor & in_tensor, Tensor & out_ts,
 			{
 				dst_ptrs[i_kernel] += dst_step_x;
 			}
-			ptr_src+= src_shape[2];
+			ptr_src += src_shape[2];
 		}
 		for (int i_kernel = 0; i_kernel < kernel_h; i_kernel++)
 		{
@@ -199,9 +276,10 @@ void antdnn::Cropping2D(Tensor & in_tensor, Tensor & out_ts, int top, int bottom
 	auto dst_ptr = out_tensor.ptr_write();
 	int src_rows = src_shape[1] * src_shape[2];
 	int dst_rows = dst_shape[1] * dst_shape[2];
+	int dst_rows_cpy = dst_rows * sizeof(float);
 	for (int i = 0; i < dst_shape[0]; i++)
 	{
-		memcpy(dst_ptr, src_ptr, dst_rows);
+		memcpy(dst_ptr, src_ptr, dst_rows_cpy);
 		dst_ptr += dst_rows;
 		src_ptr += src_rows;
 	}

@@ -10,15 +10,15 @@ void antdnn::Dense(Tensor & in_ts, Tensor & out_ts, Tensor & weights, Tensor & b
 	const float *ptr_bias = bias.ptr_read();
 	float *ptr_new = out_tensor.ptr_write();
 	out_tensor.set_to(0);
-	for (size_t i_old = 0; i_old < old_size; i_old++)
+	for (int i_old = 0; i_old < old_size; i_old++)
 	{
-		for (size_t i_new = 0; i_new < new_size; i_new++)
+		for (int i_new = 0; i_new < new_size; i_new++)
 		{
 			ptr_new[i_new] += *ptr_old * *(ptr_wei++);
 		}
 		ptr_old++;
 	}
-	for (size_t i_new = 0; i_new < new_size; i_new++)
+	for (int i_new = 0; i_new < new_size; i_new++)
 	{
 		ptr_new[i_new] += ptr_bias[i_new];
 	}

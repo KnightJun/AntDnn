@@ -1,46 +1,74 @@
 #include "Pooling.h"
-
-void antdnn::MaxPooling2D(Tensor & in_ts, Tensor & out_ts, int poolw, int poolh)
+#ifdef USE_optimization_OPENMP
+#include <omp.h>
+#endif
+extern int cpu_num;
+void MaxPooling2D_unit(const float* ptr_src, float *ptr_dst,
+	int pool_size_h, int pool_size_w, int amend, int new_row,
+	int calcrow, int *inshape, int *outshape)
 {
-	size2D pool_size;
-	pool_size.w = poolw;
-	pool_size.h = poolh;
-	int *inshape = in_ts.shape();
-	int outshape[3] = {
-		inshape[0] / pool_size.h,
-		inshape[1] / pool_size.w,
-		inshape[2]
-	};
-	int amend = inshape[1] - outshape[1] * pool_size.w;
-	Tensor out_tensor(3, outshape);
-	out_tensor.set_to(-3.40282e+038f);
-
-	int old_row = inshape[1] * inshape[2];
-	int new_row = outshape[1] * inshape[2];
-	int channel = inshape[2];
-	const float *ptr_src = in_ts.ptr_read();
-	float *ptr_dst = out_tensor.ptr_write();
-	for (int i_out = 0; i_out<outshape[0]; i_out++)
+	for (int i_out = 0; i_out < calcrow; i_out++)
 	{
-		for (int i_pool = 0; i_pool < pool_size.h; i_pool++)
+		for (int i_pool = 0; i_pool < pool_size_h; i_pool++)
 		{
 			for (int j_out = 0; j_out < outshape[1]; j_out++)
 			{
-				for (int j_pool = 0; j_pool < pool_size.w; j_pool++)
+				for (int j_pool = 0; j_pool < pool_size_w; j_pool++)
 				{
-					for (int c = 0; c < channel; c++)
+					for (int c = 0; c < inshape[2]; c++)
 					{
 						ptr_dst[c] = ptr_src[c] > ptr_dst[c] ? ptr_src[c] : ptr_dst[c];
 					}
-					ptr_src += channel;
+					ptr_src += inshape[2];
 				}
-				ptr_dst += channel;
+				ptr_dst += inshape[2];
 			}
-			ptr_src += channel * amend;
+			ptr_src += inshape[2] * amend;
 			ptr_dst -= new_row;
 		}
 		ptr_dst += new_row;
 	}
+}
+void antdnn::MaxPooling2D(Tensor & in_ts, Tensor & out_ts, int poolw, int poolh)
+{
+	int *inshape = in_ts.shape();
+	int outshape[3] = {
+		inshape[0] / poolh,
+		inshape[1] / poolw,
+		inshape[2]
+	};
+	int amend = inshape[1] - outshape[1] * poolw;
+	Tensor out_tensor(3, outshape);
+	out_tensor.set_to(-3.40282e+038f);
+
+	int new_row = outshape[1] * inshape[2];
+	int channel = inshape[2];
+	const float *ptr_src = in_ts.ptr_read();
+	float *ptr_dst = out_tensor.ptr_write();
+#if 1 //USE_optimization_OPENMP
+	MaxPooling2D_unit(ptr_src, ptr_dst, poolh, poolw, amend,
+		new_row, outshape[0], inshape, outshape);
+#else
+	int each_cpu_rows = outshape[0] / cpu_num;
+	int last_rows = each_cpu_rows + outshape[0] % cpu_num;
+	int each_cpu_rows_src = each_cpu_rows * inshape[1] * inshape[2] * poolh;
+	int each_cpu_rows_dst = each_cpu_rows * outshape[1] * outshape[2];
+#pragma omp parallel for
+	for (int i = 0; i < cpu_num; i++)
+	{
+		float *dstptr_omp = ptr_dst + each_cpu_rows_dst * i;
+		const float *srcptr_omp = ptr_src + each_cpu_rows_src * i;
+		if (i < cpu_num - 1) {
+			MaxPooling2D_unit(srcptr_omp, dstptr_omp, poolh, poolw, amend,
+				new_row, each_cpu_rows, inshape, outshape);
+		}
+		else
+		{
+			MaxPooling2D_unit(srcptr_omp, dstptr_omp, poolh, poolw, amend,
+				new_row, last_rows, inshape, outshape);
+		}
+	}
+#endif
 	out_ts = out_tensor;
 	return void();
 }

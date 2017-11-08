@@ -8,5 +8,8 @@
 - [x] add softmax 
 - [ ] construction cnn models sample 
 - [x] add load weight params from keras
-- [ ] write readme
-- [ ] push on github
+- [x] write readme
+- [x] push on github
+- [x] add conv2d_omp
+
+
