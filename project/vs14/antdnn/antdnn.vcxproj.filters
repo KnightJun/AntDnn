@@ -33,6 +33,12 @@
     <ClCompile Include="..\..\..\modules\Merge.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\modules\TensorOperating.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\modules\RunTimeDetect.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\include\antdnn\Tensor.h">
@@ -54,6 +60,12 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="..\..\..\include\antdnn\Merge.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\antdnn\TensorOperating.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\include\antdnn\RunTimeDetect.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>

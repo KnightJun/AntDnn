@@ -16,21 +16,21 @@ namespace antdnn
 	{
 	public:
 		Tensor();
-		Tensor(int dim, int *shape, float *src_data = nullptr);
+		Tensor(const int dim,const int *shape, float *src_data = nullptr);
 		Tensor(const Tensor &ts);
 
-		int dim() { return m_dim; }
-		int* shape() { return m_shape; }
-		int size() { return m_size; }
-		int quote_count() { return *m_quote_count; }
+		inline int dim() const { return m_dim; }
+		inline const int* shape() const { return m_shape; }
+		inline int size() const { return m_size; }
+		inline int quote_count() const { return *m_quote_count; }
 		void reshape(int dim, int *shape);
 
 		void set_to(float val);
-		const float* ptr_read();
+		inline const float* ptr_read() const { return m_data; };
 		float *ptr_write();
 		bool load_file(const std::string & filename);
 		bool load_file(std::ifstream & infile);
-		void recreate(int dim, int* shape, float * src_data = nullptr);
+		void recreate(const int dim, const int* shape, float * src_data = nullptr);
 
 		std::string *errmsg = nullptr;
 		Tensor & operator = (const Tensor &other);

@@ -44,7 +44,7 @@
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v140</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
@@ -69,13 +69,17 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <IncludePath>$(ProjectDir)..\..\..\include\antdnn;$(IncludePath)</IncludePath>
+    <IncludePath>$(ProjectDir)..\..\..\include\antdnn;$(ProjectDir)..\..\..\3rdparty;$(IncludePath)</IncludePath>
     <OutDir>$(SolutionDir)..\..\bin\</OutDir>
     <TargetName>$(ProjectName)d</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <IncludePath>$(ProjectDir)..\..\..\include\antdnn;$(IncludePath)</IncludePath>
+    <IncludePath>$(ProjectDir)..\..\..\include\antdnn;$(ProjectDir)..\..\..\3rdparty;$(IncludePath)</IncludePath>
     <OutDir>$(SolutionDir)..\..\bin\</OutDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>$(SolutionDir)..\..\bin_x64\</OutDir>
+    <IncludePath>$(ProjectDir)..\..\..\include\antdnn;$(VC_IncludePath);$(WindowsSDK_IncludePath);</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -84,7 +88,8 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DLL_ANTDNN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <OpenMPSupport>true</OpenMPSupport>
-      <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
+      <EnableEnhancedInstructionSet>AdvancedVectorExtensions2</EnableEnhancedInstructionSet>
+      <FloatingPointModel>Precise</FloatingPointModel>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -92,6 +97,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DLL_ANTDNN;_MBCS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -104,11 +110,14 @@
       <PreprocessorDefinitions>_DLL_ANTDNN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <OpenMPSupport>true</OpenMPSupport>
       <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
+      <FloatingPointModel>Precise</FloatingPointModel>
+      <FavorSizeOrSpeed>Neither</FavorSizeOrSpeed>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <SubSystem>Console</SubSystem>
+      <Profile>true</Profile>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -118,10 +127,14 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DLL_ANTDNN;_WINDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <OpenMPSupport>true</OpenMPSupport>
+      <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
+      <Profile>true</Profile>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -130,7 +143,9 @@
     <ClCompile Include="..\..\..\modules\Dense.cpp" />
     <ClCompile Include="..\..\..\modules\Merge.cpp" />
     <ClCompile Include="..\..\..\modules\Pooling.cpp" />
+    <ClCompile Include="..\..\..\modules\RunTimeDetect.cpp" />
     <ClCompile Include="..\..\..\modules\Tensor.cpp" />
+    <ClCompile Include="..\..\..\modules\TensorOperating.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\include\antdnn\Activation.h" />
@@ -139,7 +154,9 @@
     <ClInclude Include="..\..\..\include\antdnn\Dense.h" />
     <ClInclude Include="..\..\..\include\antdnn\Merge.h" />
     <ClInclude Include="..\..\..\include\antdnn\Pooling.h" />
+    <ClInclude Include="..\..\..\include\antdnn\RunTimeDetect.h" />
     <ClInclude Include="..\..\..\include\antdnn\Tensor.h" />
+    <ClInclude Include="..\..\..\include\antdnn\TensorOperating.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

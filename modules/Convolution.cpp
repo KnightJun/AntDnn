@@ -4,26 +4,74 @@
 #ifdef USE_optimization_OPENMP
 #include <omp.h>
 #endif
-int cpu_num = 4;
-inline void o_mul_m_add(const float mul_1, const float* mul2, float *res, int count)
+extern int cpu_num;
+
+inline void m_add(const float* param1, float *res, int count)
 {
-#ifdef USE_optimization_AVX
-	if (count < 8)
-	{
-		for (int c_dst = 0; c_dst < count; c_dst++) // 32
-		{
-			res[c_dst] += mul_1 * mul2[c_dst];
-		}
-	}
-	else
-	{
+#if USE_optimization_AVX==1
+
 		size_t cntBlock = count / 8;    // blocks
 		size_t cntRem = count % 8;
-		__m256 avx_mul_1 = _mm256_set1_ps(mul_1);
+		__m256 add1, add2, addres;
 		for (int i = 0; i < cntBlock; ++i)
 		{
-			auto midres = _mm256_mul_ps(avx_mul_1, *(__m256 *)mul2);
-			*(__m256 *)res = _mm256_add_ps(midres, *(__m256 *)res);
+			add1 = _mm256_loadu_ps(res);
+			add2 = _mm256_loadu_ps(param1);
+			addres = _mm256_add_ps(add1, add2);
+			_mm256_storeu_ps(res, addres);
+			res += 8;
+			param1 += 8;
+		}
+		for (int i = 0; i < cntRem; i++)
+		{
+			res[i] += param1[i];
+		}
+#else
+	for (int c_dst = 0; c_dst < count; c_dst++) // 32
+	{
+		res[c_dst] += param1[c_dst];
+	}
+#endif
+}
+inline void o_mul_m_add(const float mul_1, const float* mul2, float *res, int count)
+{
+#if USE_optimization_AVX==1
+	const int blocks_size = 32;
+		int cntBlock = count / blocks_size;    // blocks
+		int cntRem = count % blocks_size;
+		__m256 avx_mul_1 = _mm256_set1_ps(mul_1);
+		__m256 avx_mul_2, avx_add_2, addres, midres;
+		for (int i = 0; i < cntBlock; i++)
+		{
+			avx_mul_2 = _mm256_loadu_ps(mul2);
+			avx_add_2 = _mm256_loadu_ps(res);
+			midres = _mm256_mul_ps(avx_mul_1, avx_mul_2);
+			addres = _mm256_add_ps(midres, avx_add_2);
+			_mm256_storeu_ps(res, addres);
+			res += 8;
+			mul2 += 8;
+
+			avx_mul_2 = _mm256_loadu_ps(mul2);
+			avx_add_2 = _mm256_loadu_ps(res);
+			midres = _mm256_mul_ps(avx_mul_1, avx_mul_2);
+			addres = _mm256_add_ps(midres, avx_add_2);
+			_mm256_storeu_ps(res, addres);
+			res += 8;
+			mul2 += 8;
+
+			avx_mul_2 = _mm256_loadu_ps(mul2);
+			avx_add_2 = _mm256_loadu_ps(res);
+			midres = _mm256_mul_ps(avx_mul_1, avx_mul_2);
+			addres = _mm256_add_ps(midres, avx_add_2);
+			_mm256_storeu_ps(res, addres);
+			res += 8;
+			mul2 += 8;
+
+			avx_mul_2 = _mm256_loadu_ps(mul2);
+			avx_add_2 = _mm256_loadu_ps(res);
+			midres = _mm256_mul_ps(avx_mul_1, avx_mul_2);
+			addres = _mm256_add_ps(midres, avx_add_2);
+			_mm256_storeu_ps(res, addres);
 			res += 8;
 			mul2 += 8;
 		}
@@ -31,7 +79,6 @@ inline void o_mul_m_add(const float mul_1, const float* mul2, float *res, int co
 		{
 			res[i] += mul_1 * mul2[i];
 		}
-	}
 #else
 	for (int c_dst = 0; c_dst < count; c_dst++) // 32
 	{
@@ -41,9 +88,9 @@ inline void o_mul_m_add(const float mul_1, const float* mul2, float *res, int co
 }
 
 void Conv2D_unit(const float *srcptr, const float *kerptr, float *dstptr, const float *ptr_bias,
-	int calc_rows, int *srcshape,
-	int *dst_shape,
-	int *ker_shape)
+	const int calc_rows, const int *srcshape,
+	const int *dst_shape,
+	const int *ker_shape)
 {
 	int old_rows = srcshape[1] * srcshape[2];
 	int kernel_rows = ker_shape[1] * srcshape[2] * dst_shape[2];
@@ -73,16 +120,11 @@ void Conv2D_unit(const float *srcptr, const float *kerptr, float *dstptr, const 
 			{
 				for (int c_src = 0; c_src < srcshape[2]; c_src++) // 3
 				{
-					//for (int c_dst = 0; c_dst < dst_shape[2]; c_dst++) // 32
-					//{
 					for (int i_kernel = 0; i_kernel < ker_shape[0]; i_kernel++) // 3
 					{
-						//dstptr[c_dst] += rptrs_src[i_kernel][c_src] * (*(rptrs_kernel[i_kernel]++));
 						o_mul_m_add(rptrs_src[i_kernel][c_src], rptrs_kernel[i_kernel], dstptr, dst_shape[2]);
 						rptrs_kernel[i_kernel] += dst_shape[2];
 					}
-					//}
-
 				}
 				for (int i_r = 0; i_r < ker_shape[0]; i_r++)
 				{
@@ -90,12 +132,9 @@ void Conv2D_unit(const float *srcptr, const float *kerptr, float *dstptr, const 
 				}
 			}
 			//add bias
-			for (int c_dst = 0; c_dst < dst_shape[2]; c_dst++) // 32
-			{
-				// output matrix next data
-				*(dstptr++) += ptr_bias[c_dst];
-			}
-			// turn back the rows point 
+			m_add(ptr_bias, dstptr, dst_shape[2]);
+			dstptr += dst_shape[2];
+
 			for (int i_r = 0; i_r < ker_shape[0]; i_r++)
 			{
 				rptrs_src[i_r] -= srcshape[2] * (ker_shape[1] - 1);
@@ -175,9 +214,9 @@ void antdnn::Conv2DTranspose(Tensor & in_tensor, Tensor & out_ts,
 {
 	auto src_shape = in_tensor.shape();
 	auto kernel_shape = weights.shape();
-	int &kernel_h = kernel_shape[0];
-	int &kernel_w = kernel_shape[1];
-	int &kernel_c = kernel_shape[2];
+	const int &kernel_h = kernel_shape[0];
+	const int &kernel_w = kernel_shape[1];
+	const int &kernel_c = kernel_shape[2];
 	assert(kernel_shape[3] == src_shape[2]);
 	int dst_shape[3] = {
 		(src_shape[0] - 1) * strides_y + 1 + (kernel_h - 1),
@@ -265,7 +304,7 @@ void antdnn::Conv2DTranspose(Tensor & in_tensor, Tensor & out_ts,
 
 void antdnn::Cropping2D(Tensor & in_tensor, Tensor & out_ts, int top, int bottom, int left, int right)
 {
-	int *src_shape = in_tensor.shape();
+	const int *src_shape = in_tensor.shape();
 	int dst_shape[3] = {
 		src_shape[0] - top - bottom,
 		src_shape[1] - left - right,

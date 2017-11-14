@@ -9,7 +9,7 @@ void antdnn::activation_relu(Tensor & ts)
 	int tsize = ts.size();
 	auto ptrw = ts.ptr_write();
 
-#ifdef USE_optimization_AVX
+#if USE_optimization_AVX==1
 	if (tsize < 8)
 	{
 #ifdef USE_optimization_OPENMP
@@ -49,10 +49,10 @@ void antdnn::activation_relu(Tensor & ts)
 void antdnn::activation_softmax(Tensor & ts)
 {
 	auto ptrw = ts.ptr_write();
-	int size_channels = ts.shape()[ts.dim() - 1];
+	const int size_channels = ts.shape()[ts.dim() - 1];
 	int size_pixel = ts.size() / size_channels;
 	float sum;
-	for (size_t i = 0; i < size_pixel; i++)
+	for (int i = 0; i < size_pixel; i++)
 	{
 		sum = 0;
 		for (int c = 0; c < size_channels; c++)

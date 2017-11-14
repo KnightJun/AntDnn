@@ -3,12 +3,16 @@
 #include <string.h>
 #include <fstream>
 #include <assert.h>
+#ifdef USE_optimization_OPENMP
+#include <omp.h>
+#endif
 #define forrange(i, d) for(int i = 0; i < d; i++)
 using namespace std;
 const char* flag_file = "ant";
 const char* flag_list = "lis";
 const char* flag_tensor = "tsd";
-inline int calcSize(int dim, int *shape)
+int cpu_num = 0;
+inline int calcSize(int dim, const int *shape)
 {
 	int size = 1;
 	for (int i = 0; i < dim; i++)
@@ -20,6 +24,10 @@ inline int calcSize(int dim, int *shape)
 
 antdnn::Tensor::Tensor()
 {
+#ifdef USE_optimization_OPENMP
+	if (cpu_num == 0)  cpu_num = omp_get_num_procs();
+#endif // USE_optimization_OPENMP
+
 	errmsg = new string;
 	m_quote_count = new int(1);
 }
@@ -29,8 +37,11 @@ antdnn::Tensor::~Tensor()
 	delete errmsg;
 	release();
 }
-antdnn::Tensor::Tensor(int dim, int *shape, float * src_data)
+antdnn::Tensor::Tensor(const int dim, const int *shape, float * src_data)
 {
+#ifdef USE_optimization_OPENMP
+	if (cpu_num == 0)  cpu_num = omp_get_num_procs();
+#endif // USE_optimization_OPENMP
 	errmsg = new string;
 	this->recreate(dim, shape, src_data);
 }
@@ -61,10 +72,6 @@ void antdnn::Tensor::set_to(float val)
 	}
 }
 
-const float * antdnn::Tensor::ptr_read()
-{
-	return m_data;
-}
 
 float * antdnn::Tensor::ptr_write()
 {
@@ -159,7 +166,7 @@ void antdnn::Tensor::shallow_copy(const Tensor & ts)
 	}
 }
 
-void antdnn::Tensor::recreate(int dim, int * shape, float * src_data)
+void antdnn::Tensor::recreate(const int dim, const int * shape, float * src_data)
 {
 	this->release();
 	m_dim = dim;
@@ -280,7 +287,7 @@ void _output_line(std::ostream & ost, int size,const float* &data)
 
 void __output(std::ostream & ost, 
 	int dim, 
-	int *shape, 
+	const int *shape,
 	const float* &data, 
 	int size)
 {
